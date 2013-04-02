@@ -44,6 +44,10 @@ class ListQuerySet(datastructures.SortedDict):
     # Workaround for https://github.com/toastdriven/django-tastypie/pull/670
     query = Query()
 
+    def __init__(self, object_class, *args, **kwargs):
+        self._document = object_class
+        return super(ListQuerySet, self).__init__(*args, **kwargs)
+
     def _process_filter_value(self, value):
         # Sometimes value is passed as a list of one value
         # (if filter was converted from QueryDict, for example)
@@ -60,10 +64,10 @@ class ListQuerySet(datastructures.SortedDict):
         if 'pk' in kwargs:
             pk = unicode(self._process_filter_value(kwargs.pop('pk')))
             if pk in result:
-                result = ListQuerySet([(unicode(pk), result[pk])])
+                result = ListQuerySet(self._document, [(unicode(pk), result[pk])])
             # Sometimes None is passed as a pk to not filter by pk
             elif pk is not None:
-                result = ListQuerySet()
+                result = ListQuerySet(self._document)
 
         for field, value in kwargs.iteritems():
             value = self._process_filter_value(value)
@@ -71,7 +75,7 @@ class ListQuerySet(datastructures.SortedDict):
                 raise tastypie_exceptions.InvalidFilterError("Unsupported filter: (%s, %s)" % (field, value))
 
             try:
-                result = ListQuerySet([(unicode(obj.pk), obj) for obj in result.itervalues() if getattr(obj, field) == value])
+                result = ListQuerySet(self._document, [(unicode(obj.pk), obj) for obj in result.itervalues() if getattr(obj, field) == value])
             except AttributeError, e:
                 raise tastypie_exceptions.InvalidFilterError(e)
 
@@ -113,7 +117,7 @@ class ListQuerySet(datastructures.SortedDict):
             except (AttributeError, IndexError), e:
                 raise tastypie_exceptions.InvalidSortError(e)
 
-        return ListQuerySet(result)
+        return ListQuerySet(self._document, result)
 
     def __iter__(self):
         return self.itervalues()
@@ -183,7 +187,7 @@ class MongoEngineModelDeclarativeMetaclass(resources.ModelDeclarativeMetaclass):
                 elif issubclass(meta.object_class, mongoengine.EmbeddedDocument):
                     # Workaround for https://github.com/toastdriven/django-tastypie/pull/670
                     # We ignore queryset value later on, so we can set it here to empty one
-                    setattr(meta, 'queryset', ListQuerySet())
+                    setattr(meta, 'queryset', ListQuerySet(meta.object_class))
 
         new_class = super(resources.ModelDeclarativeMetaclass, self).__new__(self, name, bases, attrs)
         include_fields = getattr(new_class._meta, 'fields', [])
@@ -782,7 +786,7 @@ class MongoEngineListResource(MongoEngineResource):
 
     def get_object_list(self, request):
         if not self.instance:
-            return ListQuerySet()
+            return ListQuerySet(self._meta.object_class)
 
         pk_field = getattr(self._meta, 'id_field', None)
 
@@ -792,14 +796,14 @@ class MongoEngineListResource(MongoEngineResource):
                 pk = getattr(obj, pk_field)
                 obj.__class__.pk = fields.link_property(pk_field)
                 object_list.append((unicode(pk), obj))
-            return ListQuerySet(object_list)
+            return ListQuerySet(self._meta.object_class, object_list)
 
         else:
             def add_index(index, obj):
                 obj.pk = index
                 return obj
 
-            return ListQuerySet([(unicode(index), add_index(index, obj)) for index, obj in enumerate(getattr(self.instance, self.attribute))])
+            return ListQuerySet(self._meta.object_class, [(unicode(index), add_index(index, obj)) for index, obj in enumerate(getattr(self.instance, self.attribute))])
 
     def obj_create(self, bundle, **kwargs):
         try:

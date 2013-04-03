@@ -812,6 +812,7 @@ class MongoEngineListResource(MongoEngineResource):
             for key, value in kwargs.items():
                 setattr(bundle.obj, key, value)
 
+            self.authorized_create_detail(self.get_object_list(bundle.request), bundle)
             bundle = self.full_hydrate(bundle)
 
             object_list = getattr(self.instance, self.attribute)
@@ -850,6 +851,7 @@ class MongoEngineListResource(MongoEngineResource):
                 except (queryset.DoesNotExist, exceptions.ObjectDoesNotExist):
                     raise tastypie_exceptions.NotFound("A document instance matching the provided arguments could not be found.")
 
+            self.authorized_update_detail(self.get_object_list(bundle.request), bundle)
             bundle = self.full_hydrate(bundle)
 
             object_list = getattr(self.instance, self.attribute)
@@ -879,6 +881,7 @@ class MongoEngineListResource(MongoEngineResource):
             except (queryset.DoesNotExist, exceptions.ObjectDoesNotExist):
                 raise tastypie_exceptions.NotFound("A document instance matching the provided arguments could not be found.")
 
+        self.authorized_delete_detail(self.get_object_list(bundle.request), bundle)
         object_list = getattr(self.instance, self.attribute)
         pk_field = getattr(self._meta, 'id_field', None)
 
